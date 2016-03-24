@@ -209,7 +209,7 @@ static int gsm48_rx_imm_ass(struct msgb *msg, struct osmocom_ms *ms)
 	int rv;
 
 	/* Discard packet TBF assignement */
-	if (ia->page_mode & 0xf0)
+	if ((ia->page_mode & 0xf0) != 0x10)
 		return 0;
 
 	/* If we're not ready yet, or just busy ... */
@@ -649,7 +649,7 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 				app_state.dch_badcnt = 0;
 
 			/* Release condition */
-			do_rel = app_state.dch_badcnt >= 6;
+			do_rel = app_state.dch_badcnt >= 600;
 		}
 	}
 

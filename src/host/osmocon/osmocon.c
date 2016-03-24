@@ -62,6 +62,8 @@
 #define MTK_ADDRESS		0x40001400
 #define MTK_BLOCK_SIZE		1024
 
+#define I_HAVE_A_CP210x
+
 struct tool_server *tool_server_for_dlci[256];
 
 /**

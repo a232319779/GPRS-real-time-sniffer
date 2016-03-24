@@ -25,6 +25,7 @@
 /*! \file msgb.c
  */
 
+#include <stdint.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
