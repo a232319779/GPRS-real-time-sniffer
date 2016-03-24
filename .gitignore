@@ -1,0 +1,6 @@
+src/host/gsmmap/compile
+src/host/layer23/compile
+src/host/osmocon/compile
+src/shared/libosmocore/build-target/
+src/shared/libosmocore/compile
+src/shared/libosmocore/build-host/
