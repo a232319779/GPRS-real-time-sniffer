@@ -20,7 +20,7 @@ OSMOCORE_CONFIGURE_ENV= LIBOSMOCORE_LIBS=$(TOPDIR)/shared/libosmocore/build-host
 			LIBOSMOCODEC_CFLAGS=-I$(TOPDIR)/shared/libosmocore/include
 
 all: libosmocore-target nofirmware firmware mtk-firmware
-nofirmware: libosmocore-host layer23 osmocon gsmmap
+nofirmware: libosmocore-host layer23 osmocon gprsdecode gsmmap
 
 libosmocore-host: shared/libosmocore/build-host/src/.libs/libosmocore.la
 
@@ -91,6 +91,11 @@ host/layer23/Makefile: host/layer23/configure
 host/layer23/layer23: host/layer23/Makefile libosmocore-host
 	make -C host/layer23
 
+.PHONY: gprsdecode
+gprsdecode: host/gprsdecode/gprsdecode
+
+host/gprsdecode/gprsdecode:
+	make -C host/gprsdecode
 
 .PHONY: firmware
 firmware: libosmocore-target
@@ -106,6 +111,7 @@ clean:
 	make -C shared/libosmocore/build-target $@
 	make -C host/layer23 $@
 	make -C host/osmocon $@
+	make -C host/gprsdecode $@
 	make -C target/firmware $@
 	make -C target/firmware -f Makefile.mtk $@
 
