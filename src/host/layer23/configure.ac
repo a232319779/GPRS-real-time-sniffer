@@ -17,7 +17,7 @@ PKG_CHECK_MODULES(LIBOSMOCORE, libosmocore)
 PKG_CHECK_MODULES(LIBOSMOVTY, libosmovty)
 PKG_CHECK_MODULES(LIBOSMOGSM, libosmogsm)
 PKG_CHECK_MODULES(LIBOSMOCODEC, libosmocodec)
-AC_CHECK_LIB(gps, gps_waiting, CFLAGS+=" -D_HAVE_GPSD" LDFLAGS+=" -lgps",,)
+AC_CHECK_LIB(gps, gps_waiting, CFLAGS+=" -D_HAVE_GPSD" LDFLAGS+=" -lgps" LIBS+=" -lgps ",,)
 
 dnl checks for header files
 AC_HEADER_STDC
