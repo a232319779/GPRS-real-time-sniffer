@@ -26,6 +26,9 @@
 #include <stdlib.h>
 #include <time.h>
 #include <getopt.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include <arpa/inet.h>
 
@@ -606,6 +609,9 @@ gen_filename(struct osmocom_ms *ms, struct l1ctl_burst_ind *bi)
 	return buffer;
 }
 
+
+int pipe_wd = -1;
+
 void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 {
 	struct l1ctl_burst_ind *bi;
@@ -630,6 +636,7 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 
 				/* Open output */
 				app_state.fh = fopen(gen_filename(ms, bi), "wb");
+				pipe_wd = open("/tmp/gprs_fifo", O_WRONLY);
 			} else {
 				/* Abandon ? */
 				do_rel = (app_state.dch_badcnt++) >= 4;
@@ -671,15 +678,22 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 			fclose(app_state.fh);
 			app_state.fh = NULL;
 		}
+		if (pipe_wd != -1)
+		{
+			close(pipe_wd);
+			pipe_wd = -1;
+		}
 	}
 
 	/* Save the burst */
 	if (app_state.dch_state == DCH_ACTIVE)
+	{
 		fwrite(bi, sizeof(*bi), 1, app_state.fh);
-
+		write(pipe_wd, bi, sizeof(*bi));
+	}
 	/* Try local decoding */
-	if (app_state.dch_state == DCH_ACTIVE)
-		local_burst_decode(bi);
+//	if (app_state.dch_state == DCH_ACTIVE)
+//		local_burst_decode(bi);
 }
 
 void layer3_app_reset(void)
@@ -693,7 +707,10 @@ void layer3_app_reset(void)
 
 	if (app_state.fh)
 		fclose(app_state.fh);
+	if (pipe_wd != -1)
+		close(pipe_wd);
 	app_state.fh = NULL;
+	pipe_wd = -1;
 
 	memset(&app_state.cell_arfcns, 0x00, sizeof(app_state.cell_arfcns));
 }

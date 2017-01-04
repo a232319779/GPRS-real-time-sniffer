@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <fcntl.h>
 #include <arpa/inet.h>
 #include <osmocom/gsm/rsl.h>
 #include <osmocom/core/select.h>
@@ -11,6 +10,10 @@
 #include "burst_desc.h"
 #include "gprs.h"
 #include "output.h"
+
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 void process_handle_burst(struct l1ctl_burst_ind *bi)
 {
@@ -40,35 +43,77 @@ void process_handle_burst(struct l1ctl_burst_ind *bi)
 	}
 }
 
+void sniff_real_time(const char *pipe_name)
+{
+	int res = 0;
+	int pipe_rd = -1;
+	struct l1ctl_burst_ind bi = {0};
+
+	pipe_rd = access(pipe_name, R_OK);
+	if(pipe_rd == -1)
+	{
+		res = mkfifo(pipe_name,0777);
+		if(res != 0)
+		{
+			printf("Create fifo error!\n");
+			exit(0);
+		}
+	}
+
+	pipe_rd = open(pipe_name, O_RDONLY);
+
+	if(pipe_rd == -1)
+	{
+		printf("Open fifo error!\n");
+		exit(0);
+	}
+
+	do
+	{
+		res = read(pipe_rd, &bi, sizeof(bi));
+		process_handle_burst(&bi);
+	}while(res > 0);
+
+	close(pipe_rd);
+}
+
 int main(int argc, char **argv)
 {
 	int ret;
 	FILE *burst_fd;
-        struct l1ctl_burst_ind bi;
-
-	if (argc < 2) {
-		printf("\nUsage: %s <burstfile>\n", argv[0]);
-		return -1;
-	}
-
-	burst_fd = fopen(argv[1], "rb");
-	if (!burst_fd) {
-		printf("Cannot open file\n");
-		return 0;
-	}
+    struct l1ctl_burst_ind bi;
 
 	net_init();
 	gprs_init();
 	memset(gprs, 0, 16 * sizeof(struct burst_buf));
 
-	while (!feof(burst_fd)) {
-		ret = fread(&bi, sizeof(bi), 1, burst_fd);
-		if (!ret)
-			break;
-		process_handle_burst(&bi);
+	if (argc < 2) 
+	{
+		sniff_real_time("/tmp/gprs_fifo");
 	}
 
-	fclose(burst_fd);
+	else if(argc == 2)
+	{
+		sniff_real_time(argv[1]);
+	}
+
+	else
+	{
+		burst_fd = fopen(argv[1], "rb");
+		if (!burst_fd) {
+			printf("Cannot open file\n");
+			return 0;
+		}
+
+		while (!feof(burst_fd)) {
+			ret = fread(&bi, sizeof(bi), 1, burst_fd);
+			if (!ret)
+				break;
+			process_handle_burst(&bi);
+		}
+
+		fclose(burst_fd);
+	}
 	fflush(NULL);
 	return 0;
 }
