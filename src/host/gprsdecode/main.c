@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <fcntl.h>
 #include <arpa/inet.h>
 #include <osmocom/gsm/rsl.h>
 #include <osmocom/core/select.h>
