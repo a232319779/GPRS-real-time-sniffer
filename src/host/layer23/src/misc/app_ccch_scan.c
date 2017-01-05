@@ -54,6 +54,9 @@
 
 #include <osmocom/bb/misc/xcch.h>
 
+
+#define WRITE_FILE 0
+
 extern struct gsmtap_inst *gsmtap_inst;
 
 enum dch_state_t {
@@ -73,6 +76,7 @@ static struct {
 	int			dch_ciph;
 
 	FILE *			fh;
+	int			pipe_wd;
 
 	sbit_t			bursts_dl[116 * 4];
 	sbit_t			bursts_ul[116 * 4];
@@ -610,8 +614,6 @@ gen_filename(struct osmocom_ms *ms, struct l1ctl_burst_ind *bi)
 }
 
 
-int pipe_wd = -1;
-
 void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 {
 	struct l1ctl_burst_ind *bi;
@@ -635,8 +637,11 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 				app_state.dch_badcnt = 0;
 
 				/* Open output */
+				#if WRITE_FILE
 				app_state.fh = fopen(gen_filename(ms, bi), "wb");
-				pipe_wd = open("/tmp/gprs_fifo", O_WRONLY);
+				#else
+				app_state.pipe_wd = open("/tmp/gprs_fifo", O_WRONLY);
+				#endif
 			} else {
 				/* Abandon ? */
 				do_rel = (app_state.dch_badcnt++) >= 4;
@@ -678,22 +683,32 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 			fclose(app_state.fh);
 			app_state.fh = NULL;
 		}
-		if (pipe_wd != -1)
+		if (app_state.pipe_wd != -1)
 		{
-			close(pipe_wd);
-			pipe_wd = -1;
+			close(app_state.pipe_wd);
+			app_state.pipe_wd = -1;
 		}
 	}
 
+#if WRITE_FILE
 	/* Save the burst */
 	if (app_state.dch_state == DCH_ACTIVE)
 	{
 		fwrite(bi, sizeof(*bi), 1, app_state.fh);
-		write(pipe_wd, bi, sizeof(*bi));
 	}
 	/* Try local decoding */
-//	if (app_state.dch_state == DCH_ACTIVE)
-//		local_burst_decode(bi);
+	if (app_state.dch_state == DCH_ACTIVE)
+		local_burst_decode(bi);
+#else
+	/* write the burst */
+	int res = -1;
+	if (app_state.dch_state == DCH_ACTIVE)
+	{
+		res = write(app_state.pipe_wd, bi, sizeof(*bi));
+		if(res == -1)
+			LOGP(DRR, LOGL_ERROR, "write to pipe error!\n");
+	}
+#endif
 }
 
 void layer3_app_reset(void)
@@ -705,12 +720,13 @@ void layer3_app_reset(void)
 	app_state.dch_badcnt = 0;
 	app_state.dch_ciph = 0;
 
+	
 	if (app_state.fh)
 		fclose(app_state.fh);
-	if (pipe_wd != -1)
-		close(pipe_wd);
+	if (app_state.pipe_wd != -1)
+		close(app_state.pipe_wd);
 	app_state.fh = NULL;
-	pipe_wd = -1;
+	app_state.pipe_wd = -1;
 
 	memset(&app_state.cell_arfcns, 0x00, sizeof(app_state.cell_arfcns));
 }

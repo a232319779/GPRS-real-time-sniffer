@@ -68,11 +68,16 @@ void sniff_real_time(const char *pipe_name)
 		exit(0);
 	}
 
-	do
+	int times = 0;
+	while(1)
 	{
 		res = read(pipe_rd, &bi, sizeof(bi));
 		process_handle_burst(&bi);
-	}while(res > 0);
+		if(res < 0)
+		{
+		  fprintf(stderr,"break %d times.\n", times++);
+		}
+	}
 
 	close(pipe_rd);
 }
@@ -87,16 +92,19 @@ int main(int argc, char **argv)
 	gprs_init();
 	memset(gprs, 0, 16 * sizeof(struct burst_buf));
 
+	// use default fifo pipe /tmp/gprs_fifo
 	if (argc < 2) 
 	{
 		sniff_real_time("/tmp/gprs_fifo");
 	}
 
+	// use user define pipe
 	else if(argc == 2)
 	{
 		sniff_real_time(argv[1]);
 	}
 
+	// user dat file 
 	else
 	{
 		burst_fd = fopen(argv[1], "rb");
