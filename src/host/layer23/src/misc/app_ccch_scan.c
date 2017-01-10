@@ -78,7 +78,7 @@ struct s_app_state{
 	int			dch_ciph;
 
 	FILE *			fh;
-	
+
 	int			pipe_wd;
 	char		pipe_name[MAX_PIPE_NAME_LENGTH];
 	char *		ppn;
@@ -713,7 +713,7 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 	if (app_state.dch_state == DCH_ACTIVE)
 		local_burst_decode(bi);
 	*/
-	
+
 	/* write the burst */
 	int res = -1;
 	if (app_state.dch_state == DCH_ACTIVE && (app_state.ws_flag & SEND_PIPE))
@@ -733,7 +733,7 @@ void layer3_app_reset(void)
 	app_state.dch_badcnt = 0;
 	app_state.dch_ciph = 0;
 
-	
+
 	if (app_state.fh)
 		fclose(app_state.fh);
 	if (app_state.pipe_wd != -1)
