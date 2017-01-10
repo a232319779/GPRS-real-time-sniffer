@@ -54,8 +54,10 @@
 
 #include <osmocom/bb/misc/xcch.h>
 
+#define MAX_PIPE_NAME_LENGTH	128
 
-#define WRITE_FILE 0
+#define SEND_PIPE	0x0001
+#define WRITE_DISK	0x0002
 
 extern struct gsmtap_inst *gsmtap_inst;
 
@@ -66,7 +68,7 @@ enum dch_state_t {
 	DCH_WAIT_REL,
 };
 
-static struct {
+struct s_app_state{
 	int			has_si1;
 	int			ccch_mode;
 
@@ -76,7 +78,11 @@ static struct {
 	int			dch_ciph;
 
 	FILE *			fh;
+	
 	int			pipe_wd;
+	char		pipe_name[MAX_PIPE_NAME_LENGTH];
+	char *		ppn;
+	int8_t		ws_flag;
 
 	sbit_t			bursts_dl[116 * 4];
 	sbit_t			bursts_ul[116 * 4];
@@ -84,7 +90,14 @@ static struct {
 	struct gsm_sysinfo_freq	cell_arfcns[1024];
 
 	uint8_t			kc[8];
-} app_state;
+};
+
+// init app_state
+static struct s_app_state app_state = {
+	.pipe_wd = -1,
+	.ppn = "/tmp/gprs_fifo",
+	.ws_flag = 0x1,
+};
 
 
 static void dump_bcch(struct osmocom_ms *ms, uint8_t tc, const uint8_t *data)
@@ -490,107 +503,107 @@ int gsm48_rx_bcch(struct msgb *msg, struct osmocom_ms *ms)
 }
 
 
-static void
-local_burst_decode(struct l1ctl_burst_ind *bi)
-{
-	int16_t rx_dbm;
-	uint16_t arfcn;
-	uint32_t fn;
-	uint8_t cbits, tn, lch_idx;
-	int ul, bid, i;
-	sbit_t *bursts;
-	ubit_t bt[116];
-
-	/* Get params (Only for SDCCH and SACCH/{4,8,F,H}) */
-	arfcn  = ntohs(bi->band_arfcn);
-	rx_dbm = rxlev2dbm(bi->rx_level);
-
-	fn     = ntohl(bi->frame_nr);
-	ul     = !!(arfcn & ARFCN_UPLINK);
-	bursts = ul ? app_state.bursts_ul : app_state.bursts_dl;
-
-	cbits  = bi->chan_nr >> 3;
-	tn     = bi->chan_nr & 7;
-
-	bid    = -1;
-
-	if (cbits == 0x01) {			/* TCH/F */
-		lch_idx = 0;
-		if (bi->flags & BI_FLG_SACCH) {
-			uint32_t fn_report;
-			fn_report = (fn - (tn * 13) + 104) % 104;
-			bid = (fn_report - 12) / 26;
-		}
-	} else if ((cbits & 0x1e) == 0x02) {	/* TCH/H */
-		lch_idx = cbits & 1;
-		if (bi->flags & BI_FLG_SACCH) {
-			uint32_t fn_report;
-			uint8_t tn_report = (tn & ~1) | lch_idx;
-			fn_report = (fn - (tn_report * 13) + 104) % 104;
-			bid = (fn_report - 12) / 26;
-		}
-	} else if ((cbits & 0x1c) == 0x04) {	/* SDCCH/4 */
-		lch_idx = cbits & 3;
-		bid = bi->flags & 3;
-	} else if ((cbits & 0x18) == 0x08) {	/* SDCCH/8 */
-		lch_idx = cbits & 7;
-		bid = bi->flags & 3;
-	}
-
-	if (bid == -1)
-		return;
-
-	/* Clear if new set */
-	if (bid == 0)
-		memset(bursts, 0x00, 116 * 4);
-
-	/* Unpack (ignore hu/hl) */
-	osmo_pbit2ubit_ext(bt,  0, bi->bits,  0, 57, 0);
-	osmo_pbit2ubit_ext(bt, 59, bi->bits, 57, 57, 0);
-	bt[57] = bt[58] = 1;
-
-	/* A5/x */
-	if (app_state.dch_ciph) {
-		ubit_t ks_dl[114], ks_ul[114], *ks = ul ? ks_ul : ks_dl;
-		osmo_a5(app_state.dch_ciph, app_state.kc, fn, ks_dl, ks_ul);
-		for (i= 0; i< 57; i++)  bt[i] ^= ks[i];
-		for (i=59; i<116; i++)  bt[i] ^= ks[i-2];
-	}
-
-	/* Convert to softbits */
-	for (i=0; i<116; i++)
-		bursts[(116*bid)+i] = bt[i] ? - (bi->snr >> 1) : (bi->snr >> 1);
-
-	/* If last, decode */
-	if (bid == 3)
-	{
-		uint8_t l2[23];
-		int rv;
-		rv = xcch_decode(l2, bursts);
-
-		if (rv == 0)
-		{
-			uint8_t chan_type, chan_ts, chan_ss;
-			uint8_t gsmtap_chan_type;
-
-			/* Send to GSMTAP */
-			rsl_dec_chan_nr(bi->chan_nr, &chan_type, &chan_ss, &chan_ts);
-			gsmtap_chan_type = chantype_rsl2gsmtap(
-				chan_type,
-				bi->flags & BI_FLG_SACCH ? 0x40 : 0x00
-			);
-			gsmtap_send(gsmtap_inst,
-				arfcn, chan_ts, gsmtap_chan_type, chan_ss,
-				ntohl(bi->frame_nr), bi->rx_level, bi->snr,
-				l2, sizeof(l2)
-			);
-
-			/* Crude CIPH.MOD.COMMAND detect */
-			if ((l2[3] == 0x06) && (l2[4] == 0x35) && (l2[5] & 1))
-				app_state.dch_ciph = 1 + ((l2[5] >> 1) & 7);
-		}
-	}
-}
+//static void
+//local_burst_decode(struct l1ctl_burst_ind *bi)
+//{
+//	int16_t rx_dbm;
+//	uint16_t arfcn;
+//	uint32_t fn;
+//	uint8_t cbits, tn, lch_idx;
+//	int ul, bid, i;
+//	sbit_t *bursts;
+//	ubit_t bt[116];
+//
+//	/* Get params (Only for SDCCH and SACCH/{4,8,F,H}) */
+//	arfcn  = ntohs(bi->band_arfcn);
+//	rx_dbm = rxlev2dbm(bi->rx_level);
+//
+//	fn     = ntohl(bi->frame_nr);
+//	ul     = !!(arfcn & ARFCN_UPLINK);
+//	bursts = ul ? app_state.bursts_ul : app_state.bursts_dl;
+//
+//	cbits  = bi->chan_nr >> 3;
+//	tn     = bi->chan_nr & 7;
+//
+//	bid    = -1;
+//
+//	if (cbits == 0x01) {			/* TCH/F */
+//		lch_idx = 0;
+//		if (bi->flags & BI_FLG_SACCH) {
+//			uint32_t fn_report;
+//			fn_report = (fn - (tn * 13) + 104) % 104;
+//			bid = (fn_report - 12) / 26;
+//		}
+//	} else if ((cbits & 0x1e) == 0x02) {	/* TCH/H */
+//		lch_idx = cbits & 1;
+//		if (bi->flags & BI_FLG_SACCH) {
+//			uint32_t fn_report;
+//			uint8_t tn_report = (tn & ~1) | lch_idx;
+//			fn_report = (fn - (tn_report * 13) + 104) % 104;
+//			bid = (fn_report - 12) / 26;
+//		}
+//	} else if ((cbits & 0x1c) == 0x04) {	/* SDCCH/4 */
+//		lch_idx = cbits & 3;
+//		bid = bi->flags & 3;
+//	} else if ((cbits & 0x18) == 0x08) {	/* SDCCH/8 */
+//		lch_idx = cbits & 7;
+//		bid = bi->flags & 3;
+//	}
+//
+//	if (bid == -1)
+//		return;
+//
+//	/* Clear if new set */
+//	if (bid == 0)
+//		memset(bursts, 0x00, 116 * 4);
+//
+//	/* Unpack (ignore hu/hl) */
+//	osmo_pbit2ubit_ext(bt,  0, bi->bits,  0, 57, 0);
+//	osmo_pbit2ubit_ext(bt, 59, bi->bits, 57, 57, 0);
+//	bt[57] = bt[58] = 1;
+//
+//	/* A5/x */
+//	if (app_state.dch_ciph) {
+//		ubit_t ks_dl[114], ks_ul[114], *ks = ul ? ks_ul : ks_dl;
+//		osmo_a5(app_state.dch_ciph, app_state.kc, fn, ks_dl, ks_ul);
+//		for (i= 0; i< 57; i++)  bt[i] ^= ks[i];
+//		for (i=59; i<116; i++)  bt[i] ^= ks[i-2];
+//	}
+//
+//	/* Convert to softbits */
+//	for (i=0; i<116; i++)
+//		bursts[(116*bid)+i] = bt[i] ? - (bi->snr >> 1) : (bi->snr >> 1);
+//
+//	/* If last, decode */
+//	if (bid == 3)
+//	{
+//		uint8_t l2[23];
+//		int rv;
+//		rv = xcch_decode(l2, bursts);
+//
+//		if (rv == 0)
+//		{
+//			uint8_t chan_type, chan_ts, chan_ss;
+//			uint8_t gsmtap_chan_type;
+//
+//			/* Send to GSMTAP */
+//			rsl_dec_chan_nr(bi->chan_nr, &chan_type, &chan_ss, &chan_ts);
+//			gsmtap_chan_type = chantype_rsl2gsmtap(
+//				chan_type,
+//				bi->flags & BI_FLG_SACCH ? 0x40 : 0x00
+//			);
+//			gsmtap_send(gsmtap_inst,
+//				arfcn, chan_ts, gsmtap_chan_type, chan_ss,
+//				ntohl(bi->frame_nr), bi->rx_level, bi->snr,
+//				l2, sizeof(l2)
+//			);
+//
+//			/* Crude CIPH.MOD.COMMAND detect */
+//			if ((l2[3] == 0x06) && (l2[4] == 0x35) && (l2[5] & 1))
+//				app_state.dch_ciph = 1 + ((l2[5] >> 1) & 7);
+//		}
+//	}
+//}
 
 static char *
 gen_filename(struct osmocom_ms *ms, struct l1ctl_burst_ind *bi)
@@ -617,7 +630,7 @@ gen_filename(struct osmocom_ms *ms, struct l1ctl_burst_ind *bi)
 void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 {
 	struct l1ctl_burst_ind *bi;
-	int16_t rx_dbm;
+	//int16_t rx_dbm;
 	uint16_t arfcn;
 	int ul, do_rel=0;
 
@@ -625,7 +638,7 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 	bi = (struct l1ctl_burst_ind *) msg->l1h;
 
 	arfcn = ntohs(bi->band_arfcn);
-	rx_dbm = rxlev2dbm(bi->rx_level);
+	//rx_dbm = rxlev2dbm(bi->rx_level);
 	ul = !!(arfcn & ARFCN_UPLINK);
 
 	/* Check for channel start */
@@ -637,11 +650,10 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 				app_state.dch_badcnt = 0;
 
 				/* Open output */
-				#if WRITE_FILE
-				app_state.fh = fopen(gen_filename(ms, bi), "wb");
-				#else
-				app_state.pipe_wd = open("/tmp/gprs_fifo", O_WRONLY);
-				#endif
+				if(app_state.ws_flag & WRITE_DISK)
+					app_state.fh = fopen(gen_filename(ms, bi), "wb");
+				if(app_state.ws_flag & SEND_PIPE)
+					app_state.pipe_wd = open(app_state.ppn, O_WRONLY);
 			} else {
 				/* Abandon ? */
 				do_rel = (app_state.dch_badcnt++) >= 4;
@@ -690,25 +702,26 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 		}
 	}
 
-#if WRITE_FILE
 	/* Save the burst */
-	if (app_state.dch_state == DCH_ACTIVE)
+	if (app_state.dch_state == DCH_ACTIVE && (app_state.ws_flag & WRITE_DISK))
 	{
 		fwrite(bi, sizeof(*bi), 1, app_state.fh);
 	}
+
 	/* Try local decoding */
+	/*
 	if (app_state.dch_state == DCH_ACTIVE)
 		local_burst_decode(bi);
-#else
+	*/
+	
 	/* write the burst */
 	int res = -1;
-	if (app_state.dch_state == DCH_ACTIVE)
+	if (app_state.dch_state == DCH_ACTIVE && (app_state.ws_flag & SEND_PIPE))
 	{
 		res = write(app_state.pipe_wd, bi, sizeof(*bi));
 		if(res == -1)
 			LOGP(DRR, LOGL_ERROR, "write to pipe error!\n");
 	}
-#endif
 }
 
 void layer3_app_reset(void)
@@ -774,6 +787,8 @@ static int l23_getopt_options(struct option **options)
 {
 	static struct option opts [] = {
 		{"kc", 1, 0, 'k'},
+		{"write", 1, 0, 'w'},
+		{"pipe", 1, 0, 'p'}
 	};
 
 	*options = opts;
@@ -783,7 +798,9 @@ static int l23_getopt_options(struct option **options)
 static int l23_cfg_print_help()
 {
 	printf("\nApplication specific\n");
-	printf("  -k --kc KEY           Key to use to try to decipher DCCHs\n");
+	printf("  -k --kc KEY			Key to use to try to decipher DCCHs\n");
+	printf("  -f --flag FLAG		Write to disk or Send to pipe. Default 1 send to pipe.set 2 just write to disk.set 3 wirte and send\n");
+	printf("  -p --pipe PIPE		Set the pipe to send data. Default pipe is \"/tmp/gprs_fifo\"\n");
 
 	return 0;
 }
@@ -797,6 +814,21 @@ static int l23_cfg_handle(int c, const char *optarg)
 			exit(-1);
 		}
 		break;
+	case 'f':
+		printf("set flag.\n");
+		app_state.ws_flag = atoi(optarg);
+		if(app_state.ws_flag & 0xfc || app_state.ws_flag == 0)
+		{
+			fprintf(stderr, "Invalid flag.\n");
+			fprintf(stderr, "the flag just support 1, 2, 3\n");
+			exit(-1);
+		}
+		break;
+	case 'p' :
+		printf("set the pipe at %s\n", optarg);
+		strncpy(app_state.pipe_name, optarg, MAX_PIPE_NAME_LENGTH - 1);
+		app_state.ppn = app_state.pipe_name;
+		break;
 	default:
 		return -1;
 	}
@@ -806,7 +838,7 @@ static int l23_cfg_handle(int c, const char *optarg)
 static struct l23_app_info info = {
 	.copyright	= "Copyright (C) 2010 Harald Welte <laforge@gnumonks.org>\n",
 	.contribution	= "Contributions by Holger Hans Peter Freyther\n",
-	.getopt_string	= "k:",
+	.getopt_string	= "k:f:p:",
 	.cfg_supported	= l23_cfg_supported,
 	.cfg_getopt_opt = l23_getopt_options,
 	.cfg_handle_opt	= l23_cfg_handle,
