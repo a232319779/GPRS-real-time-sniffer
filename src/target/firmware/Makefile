@@ -84,6 +84,12 @@ ANY_APP_LIBS+=calypso/libcalypso.a layer1/liblayer1.a lib/libmini.a comm/libcomm
 # Include rules
 -include Makefile.inc
 
+# Single slot capture. both downlink and uplink.
+# CFLAGS += -DDDVV_SINGLE_CAPTURE
+
+# Multi(4) slot capture. Just uplink.
+# CFLAGS += -DDDVV_UPLINK
+
 # Uncomment this line if you want to enable Tx (Transmit) Support.
 #CFLAGS += -DCONFIG_TX_ENABLE
 

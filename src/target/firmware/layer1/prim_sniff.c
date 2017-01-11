@@ -272,30 +272,16 @@ const struct tdma_sched_item sniff_xcch_ul_sched_set[] = {
 };
 
 /* Single slot capture */
-#if 0
+#ifdef DDVV_SINGLE_CAPTURE
 const struct tdma_sched_item sniff_tch_sched_set[] = {
 	SCHED_ITEM_DT(l1s_sniff_cmd, 0, 0, 0),	SCHED_ITEM_DT(l1s_sniff_cmd, 0, 1, 0),	SCHED_END_FRAME(),
 											SCHED_END_FRAME(),
 	SCHED_ITEM(l1s_sniff_resp, -5, 0, 0),	SCHED_ITEM(l1s_sniff_resp, -5, 1, 0),	SCHED_END_FRAME(),
 	SCHED_END_SET()
 };
-#endif
 
 /* Multislot capture */
-
-// Downlink
-#if 1
-const struct tdma_sched_item sniff_tch_sched_set[] = {
-	SCHED_ITEM_DT(l1s_sniff_cmd, 0, 0, 0),	SCHED_ITEM_DT(l1s_sniff_cmd, 2, 0, 2),
-	SCHED_ITEM_DT(l1s_sniff_cmd, 4, 0, 4),	SCHED_ITEM_DT(l1s_sniff_cmd, 6, 0, 6),	SCHED_END_FRAME(),
-											SCHED_END_FRAME(),
-	SCHED_ITEM(l1s_sniff_resp, -5, 0, 0),	SCHED_ITEM(l1s_sniff_resp, -4, 0, 2),
-	SCHED_ITEM(l1s_sniff_resp, -3, 0, 4),	SCHED_ITEM(l1s_sniff_resp, -2, 0, 6),	SCHED_END_FRAME(),
-	SCHED_END_SET()
-};
-
-#else
-
+#elif DDVV_UPLINK
 // Uplink
 const struct tdma_sched_item sniff_tch_sched_set[] = {
 	SCHED_ITEM_DT(l1s_sniff_cmd, 0, 1, 0),	SCHED_ITEM_DT(l1s_sniff_cmd, 2, 1, 2),
@@ -303,6 +289,17 @@ const struct tdma_sched_item sniff_tch_sched_set[] = {
 											SCHED_END_FRAME(),
 	SCHED_ITEM(l1s_sniff_resp, -5, 1, 0),	SCHED_ITEM(l1s_sniff_resp, -4, 1, 2),
 	SCHED_ITEM(l1s_sniff_resp, -3, 1, 4),	SCHED_ITEM(l1s_sniff_resp, -2, 1, 6),	SCHED_END_FRAME(),
+	SCHED_END_SET()
+};
+
+#else
+// Downlink
+const struct tdma_sched_item sniff_tch_sched_set[] = {
+	SCHED_ITEM_DT(l1s_sniff_cmd, 0, 0, 0),	SCHED_ITEM_DT(l1s_sniff_cmd, 2, 0, 2),
+	SCHED_ITEM_DT(l1s_sniff_cmd, 4, 0, 4),	SCHED_ITEM_DT(l1s_sniff_cmd, 6, 0, 6),	SCHED_END_FRAME(),
+											SCHED_END_FRAME(),
+	SCHED_ITEM(l1s_sniff_resp, -5, 0, 0),	SCHED_ITEM(l1s_sniff_resp, -4, 0, 2),
+	SCHED_ITEM(l1s_sniff_resp, -3, 0, 4),	SCHED_ITEM(l1s_sniff_resp, -2, 0, 6),	SCHED_END_FRAME(),
 	SCHED_END_SET()
 };
 #endif
