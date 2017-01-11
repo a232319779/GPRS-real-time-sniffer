@@ -119,16 +119,19 @@ void process_handle_burst(struct l1ctl_burst_ind *bi)
 
 	switch (type) {
 	case RSL_CHAN_Bm_ACCHs:
-	    if ((ts > 0) && ((fn % 13) != 12))
-		process_pdch(bi, DEBUG_PRINT);
+	    if ((ts > 0) && ((fn % 13) != 12))	// 12 and 25 is the last one. should be discard. 
+			process_pdch(bi, DEBUG_PRINT);
 		break;
 	case RSL_CHAN_Lm_ACCHs:
+		printf("It RSL_CHAN_Lm_ACCHs!\n");
+		break;
 	case RSL_CHAN_BCCH:
 	case RSL_CHAN_SDCCH4_ACCH:
 	case RSL_CHAN_SDCCH8_ACCH:
 	case RSL_CHAN_RACH:
 	case RSL_CHAN_PCH_AGCH:
 	default:
+		printf("Type not handle!\n");
 		break;
 	}
 }
